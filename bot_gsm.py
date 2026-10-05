@@ -1,0 +1,261 @@
+from datetime import datetime
+import html
+import os
+import threading
+import time
+import feedparser
+from flask import Flask
+from github import Auth, Github
+import pytz
+import requests
+
+# ==========================================
+# 1. RENDER WEB SERVICE PORT CONFIG
+# ==========================================
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+  return "GSM Firmware X Telegram Bot is Active!"
+
+
+def run_web_server():
+  port = int(os.environ.get("PORT", 10000))
+  app.run(host="0.0.0.0", port=port)
+
+
+# ==========================================
+# 2. CONFIGURATION & CONSTANTS
+# ==========================================
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("CHANNEL_ID")
+
+# আপনার নির্দিষ্ট নতুন আরএসএস ফিড লিঙ্ক
+RSS_FEED_URL = os.environ.get("RSS_URL", "https://gsmfirmwarex.com/feed.xml")
+
+REPO_NAME = "sknazmul1123-gif/firmware-rss-bot"
+# একই রিপোজিটরিতে আলাদা ট্র্যাকিং ফাইল (যাতে আগের সাইটের ডাটার সাথে কনফ্লিক্ট না হয়)
+TG_FILE_PATH = "posted_urls_gsm.txt"
+
+CHECK_INTERVAL = 7200  # ২ ঘণ্টা পর পর চেক
+TG_BATCH_SIZE = 5  # ব্যাচ সাইজ ৫
+
+# ZTE সহ সব প্রয়োজনীয় ব্র্যান্ড লিস্ট
+BRANDS = [
+    "SAMSUNG",
+    "XIAOMI",
+    "REDMI",
+    "POCO",
+    "REALME",
+    "OPPO",
+    "VIVO",
+    "TECNO",
+    "INFINIX",
+    "ITEL",
+    "ONEPLUS",
+    "NOTHING",
+    "HONOR",
+    "HUAWEI",
+    "NOKIA",
+    "MOTOROLA",
+    "ZTE",
+    "LAVA",
+    "SYMPHONY",
+    "WALTON",
+    "ASUS",
+    "GOOGLE",
+    "IQOO",
+    "SONY",
+]
+
+
+# ==========================================
+# 3. HELPER FUNCTIONS
+# ==========================================
+def detect_brand(title):
+  title_upper = title.upper()
+  for brand in BRANDS:
+    if brand in title_upper:
+      if brand in ["REDMI", "POCO"]:
+        return "XIAOMI / REDMI / POCO"
+      return brand
+  return "FIRMWARE"
+
+
+def fetch_rss_entries():
+  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+  try:
+    response = requests.get(RSS_FEED_URL, headers=headers, timeout=15)
+    feed = feedparser.parse(response.content)
+    # পুরোনো থেকে নতুনের দিকে ক্রমানুসারে সাজানো
+    return list(reversed(feed.entries))
+  except Exception as e:
+    print(f"❌ RSS Fetch Error: {e}")
+    return []
+
+
+# ==========================================
+# 4. GITHUB DATABASE HANDLER
+# ==========================================
+def load_github_urls(file_path):
+  if not GITHUB_TOKEN:
+    print("❌ GITHUB_TOKEN পাওয়া যায়নি!")
+    return set()
+  try:
+    auth = Auth.Token(GITHUB_TOKEN)
+    g = Github(auth=auth)
+    repo = g.get_repo(REPO_NAME)
+    contents = repo.get_contents(file_path)
+    urls = contents.decoded_content.decode("utf-8").splitlines()
+    return set(line.strip() for line in urls if line.strip())
+  except Exception:
+    return set()
+
+
+def save_github_urls(file_path, new_urls):
+  if not GITHUB_TOKEN or not new_urls:
+    return
+  try:
+    auth = Auth.Token(GITHUB_TOKEN)
+    g = Github(auth=auth)
+    repo = g.get_repo(REPO_NAME)
+    urls_to_add = "\n".join(new_urls)
+    try:
+      contents = repo.get_contents(file_path)
+      existing = contents.decoded_content.decode("utf-8")
+      updated = (
+          (existing + f"\n{urls_to_add}")
+          if not existing.endswith("\n")
+          else (existing + f"{urls_to_add}")
+      )
+      repo.update_file(
+          path=file_path,
+          message=f"Update {file_path}",
+          content=updated,
+          sha=contents.sha,
+      )
+    except Exception:
+      repo.create_file(
+          path=file_path, message=f"Create {file_path}", content=urls_to_add
+      )
+    print(f"📁 GitHub DB আপডেটেড: {len(new_urls)} টি লিঙ্ক সেভ হয়েছে।")
+  except Exception as e:
+    print(f"❌ GitHub Save Error ({file_path}): {e}")
+
+
+# ==========================================
+# 5. TELEGRAM SYSTEM
+# ==========================================
+def send_telegram_batch(items):
+  bd_tz = pytz.timezone("Asia/Dhaka")
+  now_bd = datetime.now(bd_tz)
+  formatted_date = now_bd.strftime("%d-%m-%Y")
+  formatted_time = now_bd.strftime("%I:%M %p")
+
+  grouped_items = {}
+  for item in items:
+    brand = detect_brand(item["title"])
+    if brand not in grouped_items:
+      grouped_items[brand] = []
+    grouped_items[brand].append(item)
+
+  message_lines = [
+      "📌 <b>NEW FIRMWARE UPDATE</b>",
+      f"📅 <b>Date:</b> {formatted_date} | ⏰ <b>Time:</b> {formatted_time}",
+      '🌐 <b>Website:</b> <a href="https://gsmfirmwarex.com">Gsm Firmware'
+      " X</a>\n",
+  ]
+
+  quote_lines = ["<blockquote>"]
+  for brand, brand_items in grouped_items.items():
+    quote_lines.append(f"🔹 <b>{brand} FIRMWARE</b>\n")
+    for item in brand_items:
+      clean_title = html.escape(item["title"])
+      clean_link = item["link"].strip()
+      quote_lines.append(
+          f"🔥 NEW FILE 🔥\n➡️ <b>{clean_title}</b>\n🔗 Link: <a"
+          f' href="{clean_link}">Download</a>\n'
+      )
+    quote_lines.append("")
+
+  quote_lines.append("</blockquote>")
+
+  final_message = "\n".join(message_lines) + "\n".join(quote_lines)
+  url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+  payload = {
+      "chat_id": TELEGRAM_CHAT_ID,
+      "text": final_message,
+      "parse_mode": "HTML",
+      "disable_web_page_preview": True,
+      "disable_notification": True,
+  }
+
+  try:
+    res = requests.post(url, data=payload, timeout=15)
+    if res.status_code == 200:
+      return True
+    else:
+      print(
+          f"⚠️ Telegram API Rejected! Code: {res.status_code}, Response:"
+          f" {res.text}"
+      )
+      return False
+  except Exception as e:
+    print(f"⚠️ Telegram Request Error: {e}")
+    return False
+
+
+# ==========================================
+# 6. WORKER LOOP
+# ==========================================
+def telegram_worker():
+  print("🚀 Telegram 2-Hour Silent Digest Engine চালু হয়েছে...")
+
+  while True:
+    try:
+      tg_posted = load_github_urls(TG_FILE_PATH)
+      entries = fetch_rss_entries()
+
+      # লিংক ফিল্টারিং (যা আগে পোস্ট হয়নি)
+      unposted = [
+          e
+          for e in entries
+          if getattr(e, "link", "").strip()
+          and getattr(e, "link", "").strip() not in tg_posted
+      ]
+
+      if unposted:
+        print(f"📦 নতুন {len(unposted)} টি ফাইল পাওয়া গেছে।")
+
+        for i in range(0, len(unposted), TG_BATCH_SIZE):
+          batch = unposted[i : i + TG_BATCH_SIZE]
+          items = [{"title": e.title, "link": e.link.strip()} for e in batch]
+
+          if send_telegram_batch(items):
+            batch_urls = [it["link"] for it in items]
+            for u in batch_urls:
+              tg_posted.add(u)
+            save_github_urls(TG_FILE_PATH, batch_urls)
+            time.sleep(3)
+          else:
+            print("⚠️ টেলিগ্রামে মেসেজ পাঠানো যায়নি।")
+      else:
+        print("🔵 কোনো নতুন ফাইল পাওয়া যায়নি।")
+    except Exception as e:
+      print(f"⚠️ TG Worker Exception: {e}")
+
+    print("⏳ পরবর্তী আপডেটের জন্য ২ ঘণ্টা অপেক্ষা করা হচ্ছে...")
+    time.sleep(CHECK_INTERVAL)
+
+
+# ==========================================
+# 7. START ENGINE & WEB SERVER
+# ==========================================
+if __name__ == "__main__":
+  t1 = threading.Thread(target=telegram_worker, daemon=True)
+  t1.start()
+
+  run_web_server()
