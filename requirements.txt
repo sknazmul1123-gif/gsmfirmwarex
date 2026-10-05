@@ -1,0 +1,6 @@
+Flask
+requests
+feedparser
+pytz
+PyGithub
+beautifulsoup4
