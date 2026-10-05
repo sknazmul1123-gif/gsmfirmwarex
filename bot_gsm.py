@@ -32,17 +32,17 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("CHANNEL_ID")
 
-# আপনার নির্দিষ্ট নতুন আরএসএস ফিড লিঙ্ক
 RSS_FEED_URL = os.environ.get("RSS_URL", "https://gsmfirmwarex.com/feed.xml")
 
-REPO_NAME = "sknazmul1123-gif/firmware-rss-bot"
-# একই রিপোজিটরিতে আলাদা ট্র্যাকিং ফাইল (যাতে আগের সাইটের ডাটার সাথে কনফ্লিক্ট না হয়)
-TG_FILE_PATH = "posted_urls_gsm.txt"
+REPO_NAME = "sknazmul1123-gif/gsmfirmwarex"
+TG_FILE_PATH = "posted_urls.txt"
 
-CHECK_INTERVAL = 7200  # ২ ঘণ্টা পর পর চেক
+# টাইমিং সেটিংস
+ACTIVE_START_HOUR = 9  # সকাল ৯:০০ টা
+CHECK_INTERVAL = 300  # একটিভ টাইমে প্রতি ৫ মিনিট পর পর চেক (৩০০ সেকেন্ড)
+NIGHT_SLEEP_INTERVAL = 600  # রাতের স্লিপ মোডে প্রতি ১০ মিনিট পর পর ঘড়ি চেক করবে
 TG_BATCH_SIZE = 5  # ব্যাচ সাইজ ৫
 
-# ZTE সহ সব প্রয়োজনীয় ব্র্যান্ড লিস্ট
 BRANDS = [
     "SAMSUNG",
     "XIAOMI",
@@ -89,7 +89,6 @@ def fetch_rss_entries():
   try:
     response = requests.get(RSS_FEED_URL, headers=headers, timeout=15)
     feed = feedparser.parse(response.content)
-    # পুরোনো থেকে নতুনের দিকে ক্রমানুসারে সাজানো
     return list(reversed(feed.entries))
   except Exception as e:
     print(f"❌ RSS Fetch Error: {e}")
@@ -209,17 +208,30 @@ def send_telegram_batch(items):
 
 
 # ==========================================
-# 6. WORKER LOOP
+# 6. WORKER LOOP (SCHEDULE CONTROL)
 # ==========================================
 def telegram_worker():
-  print("🚀 Telegram 2-Hour Silent Digest Engine চালু হয়েছে...")
+  print("🚀 Telegram Scheduled RSS Engine চালু হয়েছে...")
+  bd_tz = pytz.timezone("Asia/Dhaka")
 
   while True:
     try:
+      now_bd = datetime.now(bd_tz)
+      current_hour = now_bd.hour  # ০ থেকে ২৩ পর্যন্ত ঘণ্টা
+
+      # রাত ১২:০০ টা (0) থেকে সকাল ৯:০০ টা (8:59) পর্যন্ত স্লিপ মোড
+      if current_hour < ACTIVE_START_HOUR:
+        print(
+            f"🌙 [স্লিপ মোড]: এখন সময় {now_bd.strftime('%I:%M %p')}। সার্ভার"
+            " ফ্রি রাখতে সকাল ৯:০০ টা পর্যন্ত বট স্লিপ মোডে থাকবে।"
+        )
+        time.sleep(NIGHT_SLEEP_INTERVAL)  # ১০ মিনিট পর পর শুধু সময় চেক করবে
+        continue
+
+      # সকাল ৯:০০ টা থেকে রাত ১২:০০ টা পর্যন্ত একটিভ মোড
       tg_posted = load_github_urls(TG_FILE_PATH)
       entries = fetch_rss_entries()
 
-      # লিংক ফিল্টারিং (যা আগে পোস্ট হয়নি)
       unposted = [
           e
           for e in entries
@@ -243,11 +255,13 @@ def telegram_worker():
           else:
             print("⚠️ টেলিগ্রামে মেসেজ পাঠানো যায়নি।")
       else:
-        print("🔵 কোনো নতুন ফাইল পাওয়া যায়নি।")
+        print("🔵 কোনো নতুন ফাইল নেই।")
+
     except Exception as e:
       print(f"⚠️ TG Worker Exception: {e}")
 
-    print("⏳ পরবর্তী আপডেটের জন্য ২ ঘণ্টা অপেক্ষা করা হচ্ছে...")
+    # একটিভ টাইমে প্রতি ৫ মিনিট পর পর চেক করবে
+    print("⏳ পরবর্তী চেকের জন্য ৫ মিনিট অপেক্ষা করা হচ্ছে...")
     time.sleep(CHECK_INTERVAL)
 
 
