@@ -62,3 +62,9 @@ https://gsmfirmwarex.com/file/zte-blade-v60-design-myos13-0-2026-05-21
 https://gsmfirmwarex.com/file/zte-blade-v60-design-myos13-0-2024-10-23
 https://gsmfirmwarex.com/file/zte-blade-v70-myos14-0-2-2025-07-09
 https://gsmfirmwarex.com/file/zte-blade-v70-myos14-0-3-2026-05-23
+https://gsmfirmwarex.com/file/zte-blade-v70-myos14-0-5
+https://gsmfirmwarex.com/file/zte-blade-v70-design-myos14-0-2025-03-19
+https://gsmfirmwarex.com/file/zte-blade-v70-max-myos15-0-2025-03-04
+https://gsmfirmwarex.com/file/zte-blade-v70-max-myos15-0-2026-02-18
+https://gsmfirmwarex.com/file/zte-blade-v70-max-myos15-0-2026-05-21
+https://gsmfirmwarex.com/file/zte-blade-x8-osv12-j1-0-t0801
