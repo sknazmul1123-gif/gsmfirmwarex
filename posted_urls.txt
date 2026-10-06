@@ -82,3 +82,9 @@ https://gsmfirmwarex.com/file/hmd-arc-122a-0-00ww-b01-nyx-mudtjs
 https://gsmfirmwarex.com/file/hmd-arc-tested-via-amt-pandora-nyx-1110-0-00ww
 https://gsmfirmwarex.com/file/hmd-arc-tested-via-amt-pandora-nyx-122a-0-00ww
 https://gsmfirmwarex.com/file/hmd-arc-1110-0-00ww-b01-nyx2g
+https://gsmfirmwarex.com/file/hmd-aura-1100-0-00ww-b01-rocky
+https://gsmfirmwarex.com/file/hmd-aura-116a-0-00ww-b01-rocky
+https://gsmfirmwarex.com/file/hmd-aura-1100-0-00ww-b01-rck-xml-cfg-json
+https://gsmfirmwarex.com/file/hmd-aura-116a-0-00ww-b01-rck-xml-cfg-json
+https://gsmfirmwarex.com/file/hmd-aura-1100-0-00ww-b01-rck
+https://gsmfirmwarex.com/file/hmd-aura-116a-0-00ww-b01-rck
